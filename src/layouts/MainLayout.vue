@@ -63,6 +63,10 @@
 
 <script>
 
+const path = require('path')
+
+const { app } = require('@electron/remote')
+
 export default {
   name: 'MainLayout',
   components: {
@@ -84,7 +88,64 @@ export default {
       contents: [], // children of a node
       watcher: null
     }
+  },
+
+  methods: {
+    onSelectedFolder (absolutePath) {
+      this.setSelectedFolder(absolutePath)
+    },
+
+    onShortcutSelected (type) {
+      const absolutePath = app.getPath(type)
+      this.setSelectedFolder(absolutePath)
+    },
+
+    setSelectedFolder (folder) {
+      this.selectedFolder = folder
+      // handle windows drive
+      if (process.platform === 'win32') {
+        if (this.selectedFolder.charAt(this.selectedFolder.length - 1) === ':') {
+          this.selectedFolder += path.sep
+        }
+      }
+    },
+
+    onClicked (node) {
+      // do nothing
+    },
+
+    onDblClicked (node) {
+      // open a folder
+      if (node.data.isDir) {
+        this.setSelectedFolder(node.nodeKey)
+      }
+      else {
+        this.onFileSelected(node)
+      }
+    },
+
+    onFileSelected (node) {
+      console.log('selected:', node)
+    },
+
+    toggleListType () {
+      if (this.listType === 'grid') {
+        this.listType = 'list'
+      }
+      else {
+        this.listType = 'grid'
+      }
+    },
+
+    clearAllContentItems () {
+      this.contents.splice(0, this.contents.length)
+    },
+
+    addContentItem (item) {
+      this.contents.push(item)
+    }
   }
+
 }
 </script>
 
