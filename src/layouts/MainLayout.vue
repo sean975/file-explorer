@@ -62,10 +62,13 @@
 </template>
 
 <script>
-
-const path = require('path')
-
+const { ipcRenderer } = require('electron')
 const { app } = require('@electron/remote')
+const mime = require('mime-types')
+const chokidar = require('chokidar') // file watcher
+
+const fs = require('fs')
+const path = require('path')
 
 export default {
   name: 'MainLayout',
@@ -143,6 +146,62 @@ export default {
 
     addContentItem (item) {
       this.contents.push(item)
+    },
+
+    createNode (fileInfo) {
+      let nodeKey = fileInfo.rootDir
+      if (nodeKey.charAt(nodeKey.length - 1) !== path.sep) {
+        nodeKey += path.sep
+      }
+      if (fileInfo.fileName === path.sep) {
+        fileInfo.fileName = nodeKey
+      }
+      else {
+        nodeKey += fileInfo.fileName
+      }
+      // get file mime type
+      const mimeType = mime.lookup(nodeKey)
+      // create object
+      return {
+        label: fileInfo.fileName,
+        nodeKey: nodeKey,
+        expandable: fileInfo.isDir,
+        tickable: true,
+        lazy: true,
+        children: [],
+        data: {
+          rootDir: fileInfo.rootDir,
+          isDir: fileInfo.isDir,
+          mimeType: mimeType,
+          stat: fileInfo.stat
+        }
+      }
+    },
+
+    folderWatcherHandler (newFolder, oldFolder) {
+      if (oldFolder && this.watcher) {
+        this.watcher.close()
+      }
+      if (newFolder) {
+        // let backend know
+        ipcRenderer.send('folder', newFolder)
+
+        this.watcher = chokidar.watch(newFolder, {
+          depth: 0,
+          ignorePermissionErrors: true
+        })
+        if (this.watcher) {
+          this.watcher.on('ready', () => {
+            // watch for additions
+            this.watcher.on('raw', (event, path, details) => {
+              this.$root.$emit('rescan-current-folder')
+            })
+          })
+          this.watcher.on('error', (error) => {
+            console.error(error)
+          })
+        }
+      }
     }
   }
 
