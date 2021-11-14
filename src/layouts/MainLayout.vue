@@ -70,6 +70,9 @@ const chokidar = require('chokidar') // file watcher
 const fs = require('fs')
 const path = require('path')
 
+import walkFolders from '../util/walkFolders'
+import getWindowsDrives from '../util/getWindowsDrives'
+
 export default {
   name: 'MainLayout',
   components: {
@@ -129,6 +132,42 @@ export default {
 
     onFileSelected (node) {
       console.log('selected:', node)
+    },
+
+    // called by folderTree component
+    onLazyLoad ({ node, key, done, fail }) {
+      if (this.loadChildren(node, key)) {
+        done()
+      }
+      else {
+        // if we don't call done, then the tree will
+        // allow user to try and expand node again
+        done()
+      }
+    },
+
+    loadChildren (node, key) {
+      try {
+        if (node.children.length) {
+          node.children.splice(0, node.children.length)
+        }
+        for (const fileInfo of walkFolders(key, 0)) {
+          // we only want folders
+          if (!fileInfo.isDir) {
+            continue
+          }
+          // create a new node
+          const n = this.createNode(fileInfo)
+          // add child to parent
+          node.children.push(n)
+        }
+        return true
+      }
+      catch (err) {
+        // usually access error
+        console.error('Error: ', err)
+      }
+      return false
     },
 
     toggleListType () {
@@ -202,6 +241,71 @@ export default {
           })
         }
       }
+    },
+
+    rescanCurrentFolder () {
+      this.clearAllContentItems()
+      this.contents.push(...this.getFolderContents(this.selectedFolder))
+    },
+
+    getFolders (absolutePath) {
+      const folders = []
+
+      // check incoming arg
+      if (!absolutePath || typeof absolutePath !== 'string') {
+        return folders
+      }
+
+      for (const fileInfo of walkFolders(absolutePath, 0)) {
+        // all files and folders
+        if ('error' in fileInfo) {
+          console.error(`Error: ${fileInfo.rootDir} - ${fileInfo.error}`)
+          continue
+        }
+        // we only want folders
+        if (!fileInfo.isDir) {
+          continue
+        }
+        const node = this.createNode(fileInfo)
+        folders.push(node)
+      }
+      return folders
+    },
+
+    getFolderContents (folder) {
+      const contents = []
+
+      // check incoming arg
+      if (!folder || typeof folder !== 'string') {
+        return contents
+      }
+
+      for (const fileInfo of walkFolders(folder, 0)) {
+        // all files and folders
+        if ('error' in fileInfo) {
+          console.error(`Error: ${fileInfo.rootDir} - ${fileInfo.error}`)
+          continue
+        }
+        const node = this.createNode(fileInfo)
+        contents.push(node)
+      }
+
+      return contents
+    },
+
+    checkForDrive: async function (drives, index) {
+      return new Promise(function (resolve, reject) {
+        try {
+          const stat = fs.statSync(drives[index] + ':' + path.sep)
+          drives[index] += ':\\'
+          resolve(stat)
+        }
+        catch (error) {
+          // remove from drives list
+          drives.splice(index, 1)
+          reject(error)
+        }
+      })
     }
   }
 
