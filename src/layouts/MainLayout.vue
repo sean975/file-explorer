@@ -96,6 +96,65 @@ export default {
     }
   },
 
+  created () {
+    ipcRenderer.send('message', 'Connected')
+
+    if (process.platform === 'win32') {
+      getWindowsDrives((error, drives) => {
+        if (!error) {
+          this.drives = drives
+          // work through the drives backwards
+          for (let index = this.drives.length - 1; index >= 0; --index) {
+            try {
+              const stat = fs.statSync(this.drives[index] + path.sep)
+              const fileInfo = {}
+              fileInfo.rootDir = this.drives[index]
+              fileInfo.fileName = path.sep
+              fileInfo.isDir = stat.isDirectory()
+              fileInfo.stat = stat
+              const node = this.createNode(fileInfo)
+              this.rootDir.unshift(node)
+            }
+            catch (error) {
+              // remove from drive list
+              this.drives.splice(index, 1)
+              console.error(error)
+            }
+          }
+        }
+      })
+    }
+    else {
+      // set and get root folder's folders
+      this.setSelectedFolder(this.drive + path.sep)
+      this.rootDir.push(...this.getFolders(this.selectedFolder))
+    }
+
+    this.$root.$on('rescan-current-folder', this.rescanCurrentFolder)
+  },
+
+  beforeDestroy () {
+    this.$root.$off('rescan-current-folder', this.rescanCurrentFolder)
+  },
+
+  watch: {
+    selectedFolder (newFolder, oldFolder) {
+      // The User can de-select a folder
+      if (!newFolder) {
+        newFolder = this.drive + path.sep
+      }
+
+      // tell back-end to serve files from this folder
+      ipcRenderer.send('folder', newFolder)
+
+      // folder watcher handler
+      this.folderWatcherHandler(newFolder, oldFolder)
+
+      this.clearAllContentItems()
+      this.contents.push(...this.getFolderContents(newFolder))
+    }
+  },
+
   methods: {
     onSelectedFolder (absolutePath) {
       this.setSelectedFolder(absolutePath)
